@@ -1,7 +1,7 @@
 # Imports
 import pandas as pd
 import gymnasium as gym
-from DQNAgent import DQNAgent
+from dqn_agent import DQNAgent
 import matplotlib.pyplot as plt
 
 
@@ -26,7 +26,7 @@ DISCOUNT_FACTOR = 0.99
 
 # Train DQN
 agent = DQNAgent(
-    env, 
+    env,
     gamma=DISCOUNT_FACTOR,
     lr=LR,
     batch_size=BATCH_SIZE,
@@ -47,7 +47,7 @@ ax = axes[0]
 ax.plot(stats.episode_lengths)
 ax.set_xlabel("Episode")
 ax.set_ylabel("Episode Length")
-ax.set_title("Episode Length over Time") 
+ax.set_title("Episode Length over Time")
 
 # Plot the episode reward over time
 ax = axes[1]

@@ -7,8 +7,8 @@ from collections import namedtuple
 import itertools
 
 from utils import linear_epsilon_decay, make_epsilon_greedy_policy
-from DQN import DQN
-from ReplayBuffer import ReplayBuffer
+from dqn import DQN
+from replay_buffer import ReplayBuffer
 
 def update_dqn(
         q: nn.Module,
@@ -62,7 +62,7 @@ class DQNAgent:
     def __init__(self,
             env,
             gamma=0.99,
-            lr=0.001, 
+            lr=0.001,
             batch_size=64,
             eps_start=1.0,
             eps_end=0.1,
@@ -130,7 +130,7 @@ class DQNAgent:
 
             # Reset the environment and get initial observation
             obs, _ = self.env.reset()
-            
+
             for episode_time in itertools.count():
                 # Get current epsilon value
                 epsilon = linear_epsilon_decay(self.eps_start, self.eps_end, current_timestep, self.schedule_duration)
@@ -152,15 +152,15 @@ class DQNAgent:
 
                 # Sample a mini batch from the replay buffer
                 obs_batch, act_batch, rew_batch, next_obs_batch, tm_batch = self.replay_buffer.sample(self.batch_size)
-                
+
                 # Update the Q network
                 update_dqn(
                     self.q,
                     self.q_target,
                     self.optimizer,
-                    self.gamma, 
+                    self.gamma,
                     obs_batch.float(),
-                    act_batch, 
+                    act_batch,
                     rew_batch.float(),
                     next_obs_batch.float(),
                     tm_batch
