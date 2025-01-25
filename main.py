@@ -1,4 +1,5 @@
 # Imports
+import pandas as pd
 import gymnasium as gym
 from DQNAgent import DQNAgent
 import matplotlib.pyplot as plt
