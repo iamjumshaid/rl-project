@@ -1,0 +1,7 @@
+torch
+torchvision
+torchaudio
+gymnasium==0.29.1
+minatar==1.0.15
+matplotlib
+imageio
