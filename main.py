@@ -23,6 +23,7 @@ EPS_END = 0.05
 SCHEDULE_DURATION = 15_000
 NUM_EPISODES = 1_000
 DISCOUNT_FACTOR = 0.99
+N_STEPS = 3
 
 # Train DQN
 agent = DQNAgent(
@@ -36,7 +37,7 @@ agent = DQNAgent(
     update_freq=UPDATE_FREQ,
     maxlen=REPLAY_BUFFER_SIZE,
 )
-stats = agent.train(NUM_EPISODES)
+stats = agent.train(NUM_EPISODES, N_STEPS)
 
 
 smoothing_window=20

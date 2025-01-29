@@ -15,6 +15,7 @@ def update_dqn(
         q_target: nn.Module,
         optimizer: optim.Optimizer,
         gamma: float,
+        n_steps: int,
         obs: torch.Tensor,
         act: torch.Tensor,
         rew: torch.Tensor,
@@ -40,10 +41,18 @@ def update_dqn(
 
     # Calculate the TD-Target
     with torch.no_grad():
-        q_s_prime = q_target(next_obs)
+        # Intialising multi-step reward
+        multi_step_reward = rew
 
+        # Calculting multi-step reward over n-1 steps
+        for step in range(1, n_steps):
+            next_q_values = q_target(next_obs)
+            max_next_q = torch.max(next_q_values, dim=1)[0]
+            multi_step_reward = rew + gamma * multi_step_reward * ~tm
+
+        q_s_prime = q_target(next_obs)
         max_q_s_prime = torch.max(q_s_prime, dim=1)[0]
-        td_target = rew + gamma * max_q_s_prime * ~tm
+        td_target = multi_step_reward + gamma**n_steps * max_q_s_prime * ~tm
 
     # Calculate the loss. Hint: Pytorch has the ".gather()" function, which collects values along a specified axis using some specified indexes
     q_s_a = torch.gather(q(obs), dim=1, index=act.unsqueeze(1)).squeeze(1)
@@ -108,7 +117,7 @@ class DQNAgent:
         self.policy = make_epsilon_greedy_policy(self.q, env.action_space.n)
 
 
-    def train(self, num_episodes: int) -> EpisodeStats:
+    def train(self, num_episodes: int, n_steps: int) -> EpisodeStats:
         """
         Train the DQN agent.
 
@@ -159,6 +168,7 @@ class DQNAgent:
                     self.q_target,
                     self.optimizer,
                     self.gamma,
+                    n_steps,
                     obs_batch.float(),
                     act_batch,
                     rew_batch.float(),
