@@ -8,7 +8,7 @@ import itertools
 
 from utils import linear_epsilon_decay, make_epsilon_greedy_policy
 from dqn import DQN
-from replay_buffer import ReplayBuffer
+from replay_buffer import MultiStepReplayBuffer
 
 def update_dqn(
         q: nn.Module,
@@ -41,22 +41,11 @@ def update_dqn(
 
     # Calculate the TD-Target
     with torch.no_grad():
-        # Intialising multi-step reward
-        multi_step_reward = rew
-
-        # Calculting multi-step reward over n-1 steps
-        for step in range(1, n_steps):
-            next_q_values = q_target(next_obs)
-            max_next_q = torch.max(next_q_values, dim=1)[0]
-            multi_step_reward = rew + gamma * multi_step_reward * ~tm
-
-        q_s_prime = q_target(next_obs)
-        max_q_s_prime = torch.max(q_s_prime, dim=1)[0]
-        td_target = multi_step_reward + gamma**n_steps * max_q_s_prime * ~tm
+        td_target = rew + (gamma ** n_steps) * (q_target(next_obs)).max(dim=1)[0] * (1 - tm)
 
     # Calculate the loss. Hint: Pytorch has the ".gather()" function, which collects values along a specified axis using some specified indexes
-    q_s_a = torch.gather(q(obs), dim=1, index=act.unsqueeze(1)).squeeze(1)
-    loss = nn.functional.mse_loss(q_s_a, td_target)
+    predicted_q = torch.gather(q(obs), dim=1, index=act.unsqueeze(1)).squeeze(1)
+    loss = nn.functional.mse_loss(predicted_q, td_target)
 
     # Backpropagate the loss and step the optimizer
     loss.backward()
@@ -71,6 +60,7 @@ class DQNAgent:
     def __init__(self,
             env,
             gamma=0.99,
+            num_steps=3,
             lr=0.001,
             batch_size=64,
             eps_start=1.0,
@@ -95,14 +85,15 @@ class DQNAgent:
 
         self.env = env
         self.gamma = gamma
+        self.num_steps = num_steps
         self.batch_size = batch_size
         self.eps_start = eps_start
         self.eps_end = eps_end
         self.schedule_duration = schedule_duration
         self.update_freq = update_freq
 
-        # Initialize the Replay Buffer
-        self.replay_buffer = ReplayBuffer(maxlen)
+        # Initialize the Multi-step Replay Buffer
+        self.replay_buffer = MultiStepReplayBuffer(maxlen, num_steps, gamma)
 
         # Initialize the Deep Q-Network. Hint: Remember observation_space and action_space
         self.q = DQN(self.env.observation_space.shape, self.env.action_space.n)
