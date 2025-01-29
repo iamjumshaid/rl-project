@@ -22,7 +22,14 @@ class DQN(nn.Module):
         self.conv2 = nn.Conv2d(16, 32, 3)
 
         self.fc1 = nn.Linear(32 * 4 * 4, 128)
-        self.fc2 = nn.Linear(128, num_actions)
+
+        # self.fc2 = nn.Linear(128, num_actions)
+
+        # Dueling network components
+        self.value_fc = nn.Linear(128, 1)
+        self.advantage_fc = nn.Linear(128, num_actions)
+
+        self.relu = nn.ReLU()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # To make compatible with Conv2d
@@ -33,6 +40,13 @@ class DQN(nn.Module):
 
         x = torch.flatten(x, 1)
         x = F.relu(self.fc1(x))
-        x = self.fc2(x)
+        # x = self.fc2(x)
+        # return x
 
-        return x
+        value = self.value_fc(x)
+        advantage = self.advantage_fc(x)
+
+
+        # Combine value and advantage streams to obtain Q-values
+        q_values = value + (advantage - advantage.mean(dim=1, keepdim=True))
+        return q_values
