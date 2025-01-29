@@ -2,7 +2,7 @@ import torch
 import random
 
 class MultiStepReplayBuffer:
-    def __init__(self, max_size: int, n_steps: int, gamma: float):
+    def __init__(self, max_size: int, num_steps: int, gamma: float):
         """
         Create the replay buffer.
 
@@ -14,7 +14,7 @@ class MultiStepReplayBuffer:
         self.max_size = max_size
         self.position = 0
 
-        self.n_steps = n_steps  # Number of steps to look ahead
+        self.num_steps = num_steps  # Number of steps to look ahead
         self.gamma = gamma  # Discount factor for multistep
 
     def __len__(self) -> int:
@@ -44,16 +44,21 @@ class MultiStepReplayBuffer:
         :param batch_size: The batch size.
         :returns: A tuple of tensors (obs_batch, action_batch, reward_batch, next_obs_batch, terminated_batch) with multi-step returns.
         """
-        indices = random.choices(range(len(self.data) - self.n_steps), k=batch_size)  # Ensures we have 'n' steps ahead
+
+        # Prevent sampling when buffer is too small
+        if len(self.data) < self.num_steps + 1:
+            return None
+
+        indices = random.choices(range(len(self.data) - self.num_steps), k=batch_size)  # Ensures we have 'n' steps ahead
 
         obs_batch, action_batch, reward_batch, next_obs_batch, terminated_batch = [], [], [], [], []
 
         for index in indices:
             # Compute n-step return: R_t_n = r_t + γ * r_t+1 + γ² * r_t+2 + ... + γⁿ⁻¹ * r_t+n⁻¹
-            R_t_n = sum(self.gamma ** k * self.data[index + k][2] for k in range(self.n_steps))
+            R_t_n = sum(self.gamma ** k * self.data[index + k][2] for k in range(self.num_steps))
 
             obs, action, _, _, _ = self.data[index]  # Get initial observation and action
-            _, _, _, next_obs, terminated = self.data[index + self.n_steps - 1]  # Get n-step next state and terminal flag
+            _, _, _, next_obs, terminated = self.data[index + self.num_steps - 1]  # Get n-step next state and terminal flag
 
             obs_batch.append(obs)
             action_batch.append(action)

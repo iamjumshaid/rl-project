@@ -151,7 +151,11 @@ class DQNAgent:
                                          torch.tensor(terminated))
 
                 # Sample a mini batch from the replay buffer
-                obs_batch, act_batch, rew_batch, next_obs_batch, tm_batch = self.replay_buffer.sample(self.batch_size)
+                batch = self.replay_buffer.sample_multi_step(self.batch_size)
+                if batch is None:
+                    continue
+
+                obs_batch, act_batch, rew_batch, next_obs_batch, tm_batch = batch
 
                 # Update the Q network
                 update_dqn(
