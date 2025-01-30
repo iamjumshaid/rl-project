@@ -37,7 +37,7 @@ class MultiStepReplayBuffer:
         if len(self.data) > self.max_size:
             self.data.pop(0)
 
-    def sample_multi_step(self, batch_size: int) -> torch.Tensor:
+    def sample(self, batch_size: int) -> torch.Tensor:
         """
         Sample a batch of transitions using multi-step returns.
 
@@ -46,7 +46,7 @@ class MultiStepReplayBuffer:
         """
 
         # Prevent sampling when buffer is too small
-        if len(self.data) < self.num_steps + 1:
+        if len(self.data) < self.num_steps:
             return None
 
         indices = random.choices(range(len(self.data) - self.num_steps), k=batch_size)  # Ensures we have 'n' steps ahead
@@ -55,14 +55,23 @@ class MultiStepReplayBuffer:
 
         for index in indices:
             # Compute n-step return: R_t_n = r_t + γ * r_t+1 + γ² * r_t+2 + ... + γⁿ⁻¹ * r_t+n⁻¹
-            R_t_n = sum(self.gamma ** k * self.data[index + k][2] for k in range(self.num_steps))
+            R_t_n = 0
+            for k in range(self.num_steps):
+                R_t_n += self.gamma ** k * self.data[index + k][2]
 
-            obs, action, _, _, _ = self.data[index]  # Get initial observation and action
-            _, _, _, next_obs, terminated = self.data[index + self.num_steps - 1]  # Get n-step next state and terminal flag
+                # Stop accumulating rewards if we encounter a terminal state
+                if self.data[index + k][-1]:
+                    break
+
+            # Get initial observation and action
+            obs, action, _, _, _ = self.data[index]
+
+            # Get n-step next state and terminal flag (from the last transition in the multi-step sequence)
+            _, _, _, next_obs, terminated = self.data[index + self.num_steps - 1]
 
             obs_batch.append(obs)
             action_batch.append(action)
-            reward_batch.append(R_t_n)  # Store computed multi-step return
+            reward_batch.append(R_t_n)
             next_obs_batch.append(next_obs)
             terminated_batch.append(terminated)
 

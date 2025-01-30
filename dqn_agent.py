@@ -108,7 +108,7 @@ class DQNAgent:
         self.policy = make_epsilon_greedy_policy(self.q, env.action_space.n)
 
 
-    def train(self, num_episodes: int, n_steps: int) -> EpisodeStats:
+    def train(self, num_episodes: int , num_steps: int) -> EpisodeStats:
         """
         Train the DQN agent.
 
@@ -132,7 +132,6 @@ class DQNAgent:
             obs, _ = self.env.reset()
 
             for episode_time in itertools.count():
-                # Get current epsilon value
                 epsilon = linear_epsilon_decay(self.eps_start, self.eps_end, current_timestep, self.schedule_duration)
 
                 # Choose action and execute
@@ -143,33 +142,30 @@ class DQNAgent:
                 stats.episode_rewards[i_episode] += reward
                 stats.episode_lengths[i_episode] += 1
 
-                # Store sample in the replay buffer
-                self.replay_buffer.store(torch.tensor(obs),
-                                         torch.tensor(action),
-                                         torch.tensor(reward),
-                                         torch.tensor(next_obs),
-                                         torch.tensor(terminated))
-
-                # Sample a mini batch from the replay buffer
-                batch = self.replay_buffer.sample_multi_step(self.batch_size)
-                if batch is None:
-                    continue
-
-                obs_batch, act_batch, rew_batch, next_obs_batch, tm_batch = batch
-
-                # Update the Q network
-                update_dqn(
-                    self.q,
-                    self.q_target,
-                    self.optimizer,
-                    self.gamma,
-                    n_steps,
-                    obs_batch.float(),
-                    act_batch,
-                    rew_batch.float(),
-                    next_obs_batch.float(),
-                    tm_batch
+                self.replay_buffer.store(
+                    torch.as_tensor(obs),
+                    torch.as_tensor(action),
+                    torch.as_tensor(reward),
+                    torch.as_tensor(next_obs),
+                    torch.as_tensor(terminated)
                 )
+
+                if len(self.replay_buffer) >= self.batch_size:
+                    obs_batch, act_batch, rew_batch, next_obs_batch, tm_batch = self.replay_buffer.sample(self.batch_size)
+
+                    # Update the Q network
+                    update_dqn(
+                        self.q,
+                        self.q_target,
+                        self.optimizer,
+                        self.gamma,
+                        num_steps,
+                        obs_batch.float(),
+                        act_batch,
+                        rew_batch.float(),
+                        next_obs_batch.float(),
+                        tm_batch.float()
+                    )
 
                 # Update the current Q target
                 if current_timestep % self.update_freq == 0:
