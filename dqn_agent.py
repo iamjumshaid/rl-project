@@ -7,7 +7,7 @@ from collections import namedtuple
 import itertools
 
 from utils import linear_epsilon_decay, make_epsilon_greedy_policy
-from dqn import DQN
+from DQN import DQN
 from replay_buffer import ReplayBuffer
 
 def update_dqn(
@@ -40,10 +40,13 @@ def update_dqn(
 
     # Calculate the TD-Target
     with torch.no_grad():
+
+        n_a_indices = torch.argmax(q(next_obs),dim = 1)
+
         q_s_prime = q_target(next_obs)
 
-        max_q_s_prime = torch.max(q_s_prime, dim=1)[0]
-        td_target = rew + gamma * max_q_s_prime * ~tm
+        select_n_q_val = q_s_prime.gather(1,n_a_indices.unsequeeze(1)).squeeze(1)
+        td_target = rew + gamma * select_n_q_val * ~tm
 
     # Calculate the loss. Hint: Pytorch has the ".gather()" function, which collects values along a specified axis using some specified indexes
     q_s_a = torch.gather(q(obs), dim=1, index=act.unsqueeze(1)).squeeze(1)
