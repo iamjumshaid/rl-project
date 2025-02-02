@@ -45,7 +45,7 @@ def update_dqn(
 
         q_s_prime = q_target(next_obs)
 
-        select_n_q_val = q_s_prime.gather(1,n_a_indices.unsequeeze(1)).squeeze(1)
+        select_n_q_val = q_s_prime.gather(1,n_a_indices.unsqueeze(1)).squeeze(1)
         td_target = rew + gamma * select_n_q_val * ~tm
 
     # Calculate the loss. Hint: Pytorch has the ".gather()" function, which collects values along a specified axis using some specified indexes
