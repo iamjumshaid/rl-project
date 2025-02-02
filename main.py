@@ -53,7 +53,7 @@ def main():
     print(f"Observation space: {env.observation_space}")
     print(f"Action space: {env.action_space}\n")
 
-    # --- Hyperparameters ---
+    # Hyperparameters
     LR = 0.001
     BATCH_SIZE = 8
     REPLAY_BUFFER_SIZE = 100_000
@@ -104,6 +104,7 @@ def main():
     print(f"Hyperparameters saved to {info_path}")
 
     # Train the Agent
+    training_start_time = datetime.datetime.now()
     agent = DQNAgent(
         env,
         gamma=DISCOUNT_FACTOR,
@@ -116,14 +117,28 @@ def main():
         update_freq=UPDATE_FREQ,
         maxlen=REPLAY_BUFFER_SIZE,
     )
-    stats, loss_history, best_model_state = agent.train(NUM_EPISODES)
+    stats, loss_history, best_model_state, episode_update_counts, episode_avg_losses = agent.train(NUM_EPISODES)
+
+    training_end_time = datetime.datetime.now()
+    duration = training_end_time - training_start_time
+    with open(info_path, "a") as f:
+        f.write(f"Training_Start_Time: {training_start_time}\n")
+        f.write(f"Training_End_Time: {training_end_time}\n")
+        f.write(f"Training_Duration: {duration}\n")
+    print(f"Training time info saved to {info_path}")
 
     # Save the best model
     best_model_path = os.path.join(run_folder, "best_model.pt")
     torch.save(best_model_state, best_model_path)
     print(f"Best model saved to {best_model_path}")
 
-    # Plot and Save Graphs
+    results_path = os.path.join(run_folder, "results.txt")
+    with open(results_path, "w") as f:
+        f.write("Episode\tEpisode_Length\tEpisode_Reward\tTraining_Update_Count\tAverage_Training_Loss\n")
+        for i in range(NUM_EPISODES):
+            f.write(f"{i+1}\t{stats.episode_lengths[i]}\t{stats.episode_rewards[i]}\t{episode_update_counts[i]}\t{episode_avg_losses[i]}\n")
+    print(f"Per-episode results saved to {results_path}")
+
     smoothing_window = 20
 
     # Plot: Episode Length and Episode Reward (smoothed)
@@ -154,7 +169,7 @@ def main():
         print(f"Training loss plot saved to {loss_fig_path}")
     else:
         print("No loss history recorded.")
-        
+
     # Load the best model
     agent.q.load_state_dict(best_model_state)
     policy = make_epsilon_greedy_policy(agent.q, num_actions=env.action_space.n)

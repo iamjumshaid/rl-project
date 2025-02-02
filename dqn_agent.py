@@ -106,14 +106,20 @@ class DQNAgent:
         best_reward = -float('inf')
         best_model_state = None
 
+        # Record per-episode training update count and average training loss
+        episode_update_counts = []
+        episode_avg_losses = []
+
         for i_episode in range(num_episodes):
             if (i_episode + 1) % 100 == 0:
                 print(f'Episode {i_episode + 1} / {num_episodes}  Time Step: {current_timestep}  Epsilon: {epsilon:.3f}')
-
             obs, _ = self.env.reset()
 
             episode_reward = 0
             episode_length = 0
+
+            update_count = 0
+            loss_sum = 0
 
             for episode_time in itertools.count():
                 epsilon = linear_epsilon_decay(self.eps_start, self.eps_end, current_timestep, self.schedule_duration)
@@ -133,7 +139,6 @@ class DQNAgent:
 
                 if len(self.replay_buffer) >= self.batch_size:
                     sample = self.replay_buffer.sample(self.batch_size)
-                    # sample returns: (obs_batch, act_batch, rew_batch, next_obs_batch, tm_batch, steps_batch)
                     obs_batch, act_batch, rew_batch, next_obs_batch, tm_batch, steps_batch = sample
 
                     loss = update_dqn(
@@ -149,6 +154,8 @@ class DQNAgent:
                         steps_batch
                     )
                     loss_history.append(loss.item())
+                    update_count += 1
+                    loss_sum += loss.item()
 
                 if current_timestep % self.update_freq == 0:
                     self.q_target.load_state_dict(self.q.state_dict())
@@ -161,9 +168,12 @@ class DQNAgent:
             stats.episode_rewards[i_episode] = episode_reward
             stats.episode_lengths[i_episode] = episode_length
 
-            # Track the best model (by highest episode reward)
+            episode_update_counts.append(update_count)
+            avg_loss = loss_sum / update_count if update_count > 0 else 0
+            episode_avg_losses.append(avg_loss)
+
             if episode_reward > best_reward:
                 best_reward = episode_reward
                 best_model_state = self.q.state_dict()
 
-        return stats, loss_history, best_model_state
+        return stats, loss_history, best_model_state, episode_update_counts, episode_avg_losses
