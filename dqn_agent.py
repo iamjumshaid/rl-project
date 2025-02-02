@@ -42,8 +42,12 @@ def update_dqn(
     with torch.no_grad():
         q_s_prime = q_target(next_obs)
 
-        max_q_s_prime = torch.max(q_s_prime, dim=1)[0]
-        td_target = rew + gamma * max_q_s_prime * ~tm
+        next_action = torch.argmax(q(next_obs), dim=1)
+
+        select_q_s_prime = q_s_prime.gather(1, next_action.unsqueeze(1)).squeeze(1)
+
+        td_target = rew + gamma * select_q_s_prime * ~tm
+        
 
     # Calculate the loss. Hint: Pytorch has the ".gather()" function, which collects values along a specified axis using some specified indexes
     q_s_a = torch.gather(q(obs), dim=1, index=act.unsqueeze(1)).squeeze(1)
