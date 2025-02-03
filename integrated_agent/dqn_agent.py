@@ -6,7 +6,7 @@ from collections import namedtuple
 import itertools
 
 from utils import linear_epsilon_decay, make_epsilon_greedy_policy
-from DQN import DQN
+from integrated_agent.dueling_dqn import DuelingDQN
 from integrated_agent.prioritized_replay_buffer import PrioritizedReplayBuffer
 import torch.nn.functional as F
 
@@ -105,8 +105,8 @@ class DQNAgent:
 
         self.replay_buffer = PrioritizedReplayBuffer(maxlen, num_steps, gamma, alpha)
 
-        self.q = DQN(self.env.observation_space.shape, self.env.action_space.n)
-        self.q_target = DQN(self.env.observation_space.shape, self.env.action_space.n)
+        self.q = DuelingDQN(self.env.observation_space.shape, self.env.action_space.n)
+        self.q_target = DuelingDQN(self.env.observation_space.shape, self.env.action_space.n)
         self.q_target.load_state_dict(self.q.state_dict())
 
         self.optimizer = optim.Adam(self.q.parameters(), lr=lr)
