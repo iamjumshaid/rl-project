@@ -6,7 +6,7 @@ from collections import namedtuple
 import itertools
 
 from utils import linear_epsilon_decay, make_epsilon_greedy_policy
-from dqn import DQN
+from DQN import DQN
 from replay_buffer import ReplayBuffer
 
 def update_dqn(

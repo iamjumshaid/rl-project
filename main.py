@@ -55,13 +55,13 @@ def main():
 
     # Hyperparameters
     LR = 0.001
-    BATCH_SIZE = 8
+    BATCH_SIZE = 32
     REPLAY_BUFFER_SIZE = 100_000
     UPDATE_FREQ = 100
-    EPS_START = 0.5
-    EPS_END = 0.05
+    EPS_START = 1.0
+    EPS_END = 0.01
     SCHEDULE_DURATION = 15_000
-    NUM_EPISODES = 1_000
+    NUM_EPISODES = 10_000
     DISCOUNT_FACTOR = 0.99
 
     # Decide on the number of steps based on the flag:
