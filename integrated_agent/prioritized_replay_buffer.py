@@ -1,9 +1,9 @@
 import torch
 import random
-from segment_tree import MinSegmentTree, SumSegmentTree
+from integrated_agent.segment_tree import MinSegmentTree, SumSegmentTree
 
 
-class ReplayBuffer:
+class PrioritizedReplayBuffer:
     def __init__(self, max_size: int, num_steps: int, gamma: float, alpha: float):
         """
         Create the replay buffer.

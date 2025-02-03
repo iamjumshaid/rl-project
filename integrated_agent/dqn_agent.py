@@ -7,7 +7,7 @@ import itertools
 
 from utils import linear_epsilon_decay, make_epsilon_greedy_policy
 from DQN import DQN
-from replay_buffer import ReplayBuffer
+from integrated_agent.prioritized_replay_buffer import PrioritizedReplayBuffer
 import torch.nn.functional as F
 
 EpisodeStats = namedtuple("Stats", ["episode_lengths", "episode_rewards"])
@@ -26,7 +26,7 @@ def update_dqn(
     steps: torch.Tensor,
     indices: list,
     weights: torch.Tensor,
-    memory: ReplayBuffer,
+    memory: PrioritizedReplayBuffer,
     priority_eps: float = 1e-6,
 ):
     """
@@ -103,7 +103,7 @@ class DQNAgent:
         self.alpha = alpha
         self.beta = beta
 
-        self.replay_buffer = ReplayBuffer(maxlen, num_steps, gamma, alpha)
+        self.replay_buffer = PrioritizedReplayBuffer(maxlen, num_steps, gamma, alpha)
 
         self.q = DQN(self.env.observation_space.shape, self.env.action_space.n)
         self.q_target = DQN(self.env.observation_space.shape, self.env.action_space.n)
