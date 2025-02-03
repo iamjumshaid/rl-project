@@ -40,7 +40,9 @@ def update_dqn(
     with torch.no_grad():
         # Compute discount factors: gamma^(actual_steps)
         discount_factors = torch.pow(torch.tensor(gamma, device=rew.device), steps.float())
-        td_target = rew + discount_factors * (q_target(next_obs)).max(dim=1)[0] * (1 - tm)
+        action_selection = torch.argmax(q(next_obs), dim=1)
+        q_next_eval = q_target(next_obs).gather(dim=1, index=action_selection.unsqueeze(1)).squeeze(1)
+        td_target = rew + discount_factors * q_next_eval * (1 - tm.float())
 
     predicted_q = torch.gather(q(obs), dim=1, index=act.unsqueeze(1)).squeeze(1)
     loss = nn.functional.mse_loss(predicted_q, td_target)
