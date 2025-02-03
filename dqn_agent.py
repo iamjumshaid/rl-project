@@ -38,18 +38,14 @@ def update_dqn(
     optimizer.zero_grad()
 
     with torch.no_grad():
-        q_s_prime = q_target(next_obs)
+        # Compute discount factors: gamma^(actual_steps)
+        discount_factors = torch.pow(torch.tensor(gamma, device=rew.device), steps.float())
+        action_selection = torch.argmax(q(next_obs), dim=1)
+        q_next_eval = q_target(next_obs).gather(dim=1, index=action_selection.unsqueeze(1)).squeeze(1)
+        td_target = rew + discount_factors * q_next_eval * (1 - tm.float())
 
-        next_action = torch.argmax(q(next_obs), dim=1)
-
-        select_q_s_prime = q_s_prime.gather(1, next_action.unsqueeze(1)).squeeze(1)
-
-        td_target = rew + gamma * select_q_s_prime * ~tm
-        
-
-    # Calculate the loss. Hint: Pytorch has the ".gather()" function, which collects values along a specified axis using some specified indexes
-    q_s_a = torch.gather(q(obs), dim=1, index=act.unsqueeze(1)).squeeze(1)
-    loss = nn.functional.mse_loss(q_s_a, td_target)
+    predicted_q = torch.gather(q(obs), dim=1, index=act.unsqueeze(1)).squeeze(1)
+    loss = nn.functional.mse_loss(predicted_q, td_target)
 
     loss.backward()
     optimizer.step()
