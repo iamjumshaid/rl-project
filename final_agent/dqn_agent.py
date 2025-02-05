@@ -1,4 +1,5 @@
 import torch
+import os
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
@@ -6,8 +7,8 @@ from collections import namedtuple
 import itertools
 
 from utils import linear_epsilon_decay, make_epsilon_greedy_policy
-from integrated_agent.DQN import DQN
-from integrated_agent.prioritized_replay_buffer import PrioritizedReplayBuffer
+from final_agent.DuelingDQN import DuelingDQN
+from final_agent.replay_buffer import ReplayBuffer
 import torch.nn.functional as F
 
 EpisodeStats = namedtuple("Stats", ["episode_lengths", "episode_rewards"])
@@ -24,10 +25,6 @@ def update_dqn(
     next_obs: torch.Tensor,
     tm: torch.Tensor,
     steps: torch.Tensor,
-    indices: list,
-    weights: torch.Tensor,
-    memory: PrioritizedReplayBuffer,
-    priority_eps: float = 1e-6,
 ):
     """
     Update the DQN network for one optimizer step using multi-step targets (or one-step if num_steps = 1).
@@ -43,46 +40,27 @@ def update_dqn(
     :param tm: Batch of termination flags.
     :param steps: Batch of actual multi-step lengths used per sample.
     """
+    optimizer.zero_grad()
 
-    # with torch.no_grad():
-    #     # Compute discount factors: gamma^(actual_steps)
-    #     discount_factors = torch.pow(
-    #         torch.tensor(gamma, device=steps.device), steps.float()
-    #     )
-        
-    #     action_selection = torch.argmax(q(next_obs), dim=1)
-        
-    #     q_next_eval = (
-    #         q_target(next_obs)
-    #         .gather(dim=1, index=action_selection.unsqueeze(1))
-    #         .squeeze(1)
-    #     )
-        
-    #     td_target = rew + discount_factors * q_next_eval * (1 - tm.float())
-    
-    
     with torch.no_grad():
-        discount_factors = torch.pow(   
+        # Compute discount factors: gamma^(actual_steps)
+        discount_factors = torch.pow(
             torch.tensor(gamma, device=steps.device), steps.float()
         )
+        action_selection = torch.argmax(q(next_obs), dim=1)
+        q_next_eval = (
+            q_target(next_obs)
+            .gather(dim=1, index=action_selection.unsqueeze(1))
+            .squeeze(1)
+        )
+        td_target = rew + discount_factors * q_next_eval * (1 - tm.float())
 
-        q_s_prime = q_target(next_obs)
-        max_q_s_prime = torch.max(q_s_prime, dim=1)[0]
-        td_target = rew + discount_factors * max_q_s_prime * (1 - tm.float())
+    # Calculate the loss. Hint: Pytorch has the ".gather()" function, which collects values along a specified axis using some specified indexes
+    q_s_a = torch.gather(q(obs), dim=1, index=act.unsqueeze(1)).squeeze(1)
+    loss = nn.functional.mse_loss(q_s_a, td_target)
 
-    predicted_q = torch.gather(q(obs), dim=1, index=act.unsqueeze(1)).squeeze(1)
-    elementwise_loss = F.smooth_l1_loss(predicted_q, td_target, reduction="none")
-
-    loss = torch.mean(elementwise_loss * weights)
-
-    optimizer.zero_grad()
     loss.backward()
     optimizer.step()
-
-    td_delta = elementwise_loss.detach().cpu().numpy()
-    new_priorities = td_delta + priority_eps
-    memory.update_experience_priorities(indices, new_priorities)
-
     return loss
 
 
@@ -100,9 +78,7 @@ class DQNAgent:
         update_freq=100,
         maxlen=100_000,
         training_start=5000,
-        alpha=0.5,
-        beta=0.4,
-        device=None
+        device=None,
     ):
         """
         Initialize the DQN agent.
@@ -116,16 +92,14 @@ class DQNAgent:
         self.schedule_duration = schedule_duration
         self.update_freq = update_freq
         self.training_start = training_start
-        self.alpha = alpha
-        self.beta = beta
         self.device = device
 
-        self.replay_buffer = PrioritizedReplayBuffer(maxlen, num_steps, gamma, alpha)
+        self.replay_buffer = ReplayBuffer(maxlen, num_steps, gamma)
 
-        self.q = DQN(self.env.observation_space.shape, self.env.action_space.n)
+        self.q = DuelingDQN(self.env.observation_space.shape, self.env.action_space.n)
         self.q.to(self.device)
-        
-        self.q_target = DQN(self.env.observation_space.shape, self.env.action_space.n)
+
+        self.q_target = DuelingDQN(self.env.observation_space.shape, self.env.action_space.n)
         self.q_target.load_state_dict(self.q.state_dict())
         self.q_target.to(self.device)
 
@@ -156,6 +130,9 @@ class DQNAgent:
         # Record per-episode training update count and average training loss
         episode_update_counts = []
         episode_avg_losses = []
+        
+        checkpoint_interval = 1000  # Save model every 1000 steps
+        checkpoint_dir = "checkpoints"
 
         for i_episode in range(num_episodes):
             if (i_episode + 1) % 100 == 0:
@@ -169,6 +146,18 @@ class DQNAgent:
 
             update_count = 0
             loss_sum = 0
+            
+            if i_episode % checkpoint_interval == 0:
+                checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_more_steps_{i_episode}.pt")
+                torch.save({
+                    'episode': i_episode,
+                    'step': current_timestep,
+                    'model_state_dict': self.q.state_dict(),
+                    'target_model_state_dict': self.q_target.state_dict(),
+                    'optimizer_state_dict': self.optimizer.state_dict(),
+                    'epsilon': epsilon
+                }, checkpoint_path)
+                print(f"Checkpoint saved at step {current_timestep}")
 
             for episode_time in itertools.count():
                 epsilon = linear_epsilon_decay(
@@ -187,19 +176,41 @@ class DQNAgent:
                 episode_length += 1
 
                 self.replay_buffer.store(
-                    torch.tensor(obs, dtype=torch.float32).clone().detach().cpu() if not isinstance(obs, torch.Tensor) else obs.clone().detach().cpu(),
-                    torch.tensor(action, dtype=torch.int64).clone().detach().cpu() if not isinstance(action, torch.Tensor) else action.clone().detach().cpu(),
-                    torch.tensor(reward, dtype=torch.float32).clone().detach().cpu() if not isinstance(reward, torch.Tensor) else reward.clone().detach().cpu(),
-                    torch.tensor(next_obs, dtype=torch.float32).clone().detach().cpu() if not isinstance(next_obs, torch.Tensor) else next_obs.clone().detach().cpu(),
-                    torch.tensor(terminated, dtype=torch.bool).clone().detach().cpu() if not isinstance(terminated, torch.Tensor) else terminated.clone().detach().cpu(),
+                    (
+                        torch.tensor(obs, dtype=torch.float32).clone().detach().cpu()
+                        if not isinstance(obs, torch.Tensor)
+                        else obs.clone().detach().cpu()
+                    ),
+                    (
+                        torch.tensor(action, dtype=torch.int64).clone().detach().cpu()
+                        if not isinstance(action, torch.Tensor)
+                        else action.clone().detach().cpu()
+                    ),
+                    (
+                        torch.tensor(reward, dtype=torch.float32).clone().detach().cpu()
+                        if not isinstance(reward, torch.Tensor)
+                        else reward.clone().detach().cpu()
+                    ),
+                    (
+                        torch.tensor(next_obs, dtype=torch.float32)
+                        .clone()
+                        .detach()
+                        .cpu()
+                        if not isinstance(next_obs, torch.Tensor)
+                        else next_obs.clone().detach().cpu()
+                    ),
+                    (
+                        torch.tensor(terminated, dtype=torch.bool)
+                        .clone()
+                        .detach()
+                        .cpu()
+                        if not isinstance(terminated, torch.Tensor)
+                        else terminated.clone().detach().cpu()
+                    ),
                 )
-                
+
                 if len(self.replay_buffer) < self.training_start:
                     continue
-
-                # Linearly increase beta
-                fraction = min(i_episode / num_episodes, 1.0)
-                self.beta = self.beta + fraction * (1.0 - self.beta)
 
                 if len(self.replay_buffer) >= self.batch_size:
                     (
@@ -209,15 +220,12 @@ class DQNAgent:
                         next_obs_batch,
                         tm_batch,
                         steps_batch,
-                        indices,
-                        weights,
-                    ) = self.replay_buffer.sample(self.batch_size, self.beta)
-                    
+                    ) = self.replay_buffer.sample(self.batch_size)
+
                     obs_batch = obs_batch.to(self.device)
                     act_batch = act_batch.to(self.device)
                     rew_batch = rew_batch.to(self.device)
                     next_obs_batch = next_obs_batch.to(self.device)
-                    weights = weights.to(self.device)
                     tm_batch = tm_batch.to(self.device)
                     steps_batch = steps_batch.to(self.device)
 
@@ -232,9 +240,6 @@ class DQNAgent:
                         next_obs_batch.float(),
                         tm_batch.float(),
                         steps_batch,
-                        indices,
-                        weights,
-                        self.replay_buffer,
                     )
                     loss_history.append(loss.item())
                     update_count += 1

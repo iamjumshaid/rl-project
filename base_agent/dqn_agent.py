@@ -5,8 +5,8 @@ import numpy as np
 from collections import namedtuple
 import itertools
 from utils import linear_epsilon_decay, make_epsilon_greedy_policy
-from DQN import DQN
-from replay_buffer import ReplayBuffer
+from base_agent.DQN import DQN
+from base_agent.replay_buffer import ReplayBuffer
 
 
 def update_dqn(
@@ -63,6 +63,8 @@ class DQNAgent:
         schedule_duration=10_000,
         update_freq=100,
         maxlen=100_000,
+        training_start=5000,
+        device=None,
     ):
         """
         Initialize the DQN agent.
@@ -83,14 +85,22 @@ class DQNAgent:
         self.eps_end = eps_end
         self.schedule_duration = schedule_duration
         self.update_freq = update_freq
+        self.training_start = training_start
+        self.device = device
+
         # Initialize the Replay Buffer
         self.replay_buffer = ReplayBuffer(maxlen)
+
         # Initialize the Deep Q-Network. Hint: Remember observation_space and action_space
         self.q = DQN(self.env.observation_space.shape, self.env.action_space.n)
+        self.q.to(self.device)
+
         # Initialize the second Q-Network, u
         # the target network. Load the parameters of the first one into the second
         self.q_target = DQN(self.env.observation_space.shape, self.env.action_space.n)
         self.q_target.load_state_dict(self.q.state_dict())
+        self.q_target.to(self.device)
+
         # Create an ADAM optimizer for the Q-network
         self.optimizer = optim.Adam(self.q.parameters(), lr=lr)
         self.policy = make_epsilon_greedy_policy(self.q, env.action_space.n)
@@ -108,14 +118,29 @@ class DQNAgent:
         )
         current_timestep = 0
         epsilon = self.eps_start
+
+        loss_history = []
+        best_reward = -float("inf")
+        best_model_state = None
+
+        # Record per-episode training update count and average training loss
+        episode_update_counts = []
+        episode_avg_losses = []
+
         for i_episode in range(num_episodes):
             # Print out which episode we're on, useful for debugging.
             if (i_episode + 1) % 100 == 0:
                 print(
-                    f"Episode {i_episode + 1} of {num_episodes}  Time Step: {current_timestep}  Epsilon: {epsilon:.3f}"
+                    f"Episode {i_episode + 1} of {num_episodes}  Time Step: {current_timestep}  Epsilon: {epsilon:.3f} Training Started: {len(self.replay_buffer) > self.training_start}"
                 )
             # Reset the environment and get initial observation
             obs, _ = self.env.reset()
+
+            episode_reward = 0
+            episode_length = 0
+
+            update_count = 0
+            loss_sum = 0
 
             for episode_time in itertools.count():
                 # Get current epsilon value
@@ -126,28 +151,40 @@ class DQNAgent:
                     self.schedule_duration,
                 )
                 # Choose action and execute
+                obs = torch.as_tensor(obs).to(self.device)
                 action = self.policy(
                     torch.as_tensor(obs).unsqueeze(0).float(), epsilon=epsilon
                 )
                 next_obs, reward, terminated, truncated, _ = self.env.step(action)
                 # Update statistics
-                stats.episode_rewards[i_episode] += reward
-                stats.episode_lengths[i_episode] += 1
+                episode_reward += reward
+                episode_length += 1
                 # Store sample in the replay buffer
                 self.replay_buffer.store(
-                    torch.tensor(obs),
-                    torch.tensor(action),
-                    torch.tensor(reward),
-                    torch.tensor(next_obs),
-                    torch.tensor(terminated),
+                    torch.tensor(obs, dtype=torch.float32).clone().detach().cpu() if not isinstance(obs, torch.Tensor) else obs.clone().detach().cpu(),
+                    torch.tensor(action, dtype=torch.int64).clone().detach().cpu() if not isinstance(action, torch.Tensor) else action.clone().detach().cpu(),
+                    torch.tensor(reward, dtype=torch.float32).clone().detach().cpu() if not isinstance(reward, torch.Tensor) else reward.clone().detach().cpu(),
+                    torch.tensor(next_obs, dtype=torch.float32).clone().detach().cpu() if not isinstance(next_obs, torch.Tensor) else next_obs.clone().detach().cpu(),
+                    torch.tensor(terminated, dtype=torch.bool).clone().detach().cpu() if not isinstance(terminated, torch.Tensor) else terminated.clone().detach().cpu(),
                 )
                 # Sample a mini batch from the replay buffer
+                
+                # Only train after a certain amount of transitions are present in the buffer
+                if len(self.replay_buffer) < self.training_start:
+                    continue
+
                 obs_batch, act_batch, rew_batch, next_obs_batch, tm_batch = (
                     self.replay_buffer.sample(self.batch_size)
                 )
 
+                obs_batch = obs_batch.to(self.device)
+                act_batch = act_batch.to(self.device)
+                rew_batch = rew_batch.to(self.device)
+                next_obs_batch = next_obs_batch.to(self.device)
+                tm_batch = tm_batch.to(self.device)
+
                 # Update the Q network
-                update_dqn(
+                loss = update_dqn(
                     self.q,
                     self.q_target,
                     self.optimizer,
@@ -158,6 +195,10 @@ class DQNAgent:
                     next_obs_batch.float(),
                     tm_batch,
                 )
+                loss_history.append(loss.item())
+                update_count += 1
+                loss_sum += loss.item()
+
                 # Update the current Q target
                 if current_timestep % self.update_freq == 0:
                     self.q_target.load_state_dict(self.q.state_dict())
@@ -166,4 +207,22 @@ class DQNAgent:
                 if terminated or truncated or episode_time >= 500:
                     break
                 obs = next_obs
-        return stats
+
+            stats.episode_rewards[i_episode] = episode_reward
+            stats.episode_lengths[i_episode] = episode_length
+
+            episode_update_counts.append(update_count)
+            avg_loss = loss_sum / update_count if update_count > 0 else 0
+            episode_avg_losses.append(avg_loss)
+
+            if episode_reward > best_reward:
+                best_reward = episode_reward
+                best_model_state = self.q.state_dict()
+
+        return (
+            stats,
+            loss_history,
+            best_model_state,
+            episode_update_counts,
+            episode_avg_losses,
+        )
