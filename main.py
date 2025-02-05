@@ -54,14 +54,15 @@ def main():
     print(f"Action space: {env.action_space}\n")
 
     # Hyperparameters
-    LR = 0.001
-    BATCH_SIZE = 8
+    LR = 0.00025
+    BATCH_SIZE = 32
     REPLAY_BUFFER_SIZE = 100_000
     UPDATE_FREQ = 100
-    EPS_START = 0.5
-    EPS_END = 0.05
-    SCHEDULE_DURATION = 15_000
-    NUM_EPISODES = 1_000
+    EPS_START = 1
+    EPS_END = 0.01
+    NUM_EPISODES = 5_000
+    AVG_FRAME_PER_EPISODE = 200
+    SCHEDULE_DURATION = AVG_FRAME_PER_EPISODE * NUM_EPISODES * 0.02
     DISCOUNT_FACTOR = 0.99
 
     # Decide on the number of steps based on the flag:
