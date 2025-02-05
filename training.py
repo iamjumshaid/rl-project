@@ -19,18 +19,20 @@ def main():
     print(f"Action space: {env.action_space}\n")
 
     NUM_EPISODES = 10_000
-
+    
+    AVG_FRAME_PER_EPISODE = 200
     base_hyperparameters = {
-        "lr": 0.001, 
-        "batch_size": 32,
-        "maxlen": 100_000,
-        "update_freq": 100,
-        "eps_start": 1,
-        "eps_end": 0.01,
-        "schedule_duration": 15_000,
-        "gamma": 0.99,
-        "device":  torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    }
+            "lr": 0.00025 / 4, 
+            "batch_size": 32,
+            "maxlen": 100_000,
+            "eps_start": 1,
+            "eps_end": 0.01,
+            "gamma": 0.99,
+            "update_freq": NUM_EPISODES / 25,
+            "schedule_duration": AVG_FRAME_PER_EPISODE * NUM_EPISODES * 0.02,
+            "training_start": 5000,
+            "device":  torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        }
 
     if args.agent_type == "base":
         agent = BaseAgent(env, **base_hyperparameters)
@@ -43,7 +45,7 @@ def main():
         }
         agent = PERAgent(env, **base_hyperparameters, **per_hyperparameters)
         stats = agent.train(NUM_EPISODES)
-        save_episode_stats(stats, f"results/{args.env_name}_per.csv")
+        save_episode_stats(stats, f"results/{args.env_name}_per_lower_lr_heap.csv")
 
 if __name__ == "__main__":
     main()

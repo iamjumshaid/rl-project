@@ -9,7 +9,7 @@ from collections import namedtuple
 
 from DQN import DQN
 from utils import linear_epsilon_decay, make_epsilon_greedy_policy
-from per.prioritized_replay_buffer import PrioritizedReplayBuffer
+from per.prioritized_replay_buffer_heap import PrioritizedReplayBufferHeap as PrioritizedReplayBuffer
 
 
 EpisodeStats = namedtuple("Stats", ["episode_lengths", "episode_rewards"])
@@ -93,6 +93,7 @@ class DQNAgent:
         alpha=0.2,
         beta=0.6,
         device=None,
+        training_start=None
     ):
         """
         Initialize the DQN agent.
@@ -117,6 +118,7 @@ class DQNAgent:
         self.update_freq = update_freq
         self.beta = beta
         self.device = device
+        self.training_start = training_start
 
         # Initialize the Replay Buffer
         self.replay_buffer = PrioritizedReplayBuffer(maxlen, alpha)
@@ -186,6 +188,9 @@ class DQNAgent:
                     torch.tensor(next_obs),
                     torch.tensor(terminated),
                 )
+                
+                if len(self.replay_buffer) < self.training_start:
+                    continue
 
                 # Linearly increase beta
                 fraction = min(i_episode / num_episodes, 1.0)

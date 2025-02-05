@@ -89,7 +89,7 @@ def save_episode_stats(stats, save_path):
     df.to_csv(save_path, index=False)
     
 
-def plot_comparison_stats(based_stats, per_stats, smoothing_window=500):
+def plot_comparison_stats(based_stats, per_stats, smoothing_window=500, env_name=""):
     """
     Plots the smoothed episode rewards for two different sets of statistics.
     
@@ -103,8 +103,8 @@ def plot_comparison_stats(based_stats, per_stats, smoothing_window=500):
     rewards_smoothed_based = based_stats["reward"].rolling(smoothing_window, min_periods=smoothing_window).mean()
     rewards_smoothed_per = per_stats["reward"].rolling(smoothing_window, min_periods=smoothing_window).mean()
     
-    ax.plot(rewards_smoothed_based, label="Baseline Rewards", color="blue")
-    ax.plot(rewards_smoothed_per, label="PER Rewards", color="red")
+    ax.plot(rewards_smoothed_based, label=f"Baseline Rewards {env_name}", color="blue")
+    ax.plot(rewards_smoothed_per, label=f"PER Rewards {env_name}", color="red")
     
     ax.set_xlabel("Episode")
     ax.set_ylabel("Episode Reward (Smoothed)")
